@@ -6,8 +6,8 @@
 // === Replace with actual addresses ===
 #define PATCH_LEN 8
 
-void *sscanf_addr    = (void *)0x100000000; // 🛑 Replace with actual sscanf address
-void *observer_addr  = (void *)0x100001000; // 🛑 Replace with actual observer address
+void *sscanf_addr    = (void *)0x101E3069C; // 🛑 Replace with actual sscanf address
+void *observer_addr  = (void *)0x1012E0B4C; // 🛑 Replace with actual observer address
 
 uint8_t patch_sscanf[PATCH_LEN]   = { 0x00, 0x00, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6 }; // MOV X0, #0; RET
 uint8_t patch_observer[PATCH_LEN] = { 0x20, 0x00, 0x08, 0xD2, 0xC0, 0x03, 0x5F, 0xD6 }; // MOV W0, #1; RET
