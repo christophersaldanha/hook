@@ -1,52 +1,49 @@
 #import <UIKit/UIKit.h>
 #import "fishhook.h"
 
-// Save original sscanf
-int (*original_sscanf)(const char *str, const char *format, ...);
+// Declare a pointer to the original sscanf function
+int (*original_sscanf)(const char *, const char *, ...);
 
-// Hooked version
-int my_sscanf(const char *str, const char *format, ...) {
-    NSLog(@"[HOOKED] sscanf was blocked");
-    return 0; // block completely
+// Your custom hook function
+int my_sscanf(const char *input, const char *format, ...) {
+    NSLog(@"[HOOK] sscanf intercepted!");
+    
+    // You can modify `input` or `format` here if needed
+
+    va_list args;
+    va_start(args, format);
+    int result = vsscanf(input, format, args);
+    va_end(args);
+
+    return result;
 }
 
-// Run-time hook function
-void activateHook() {
-    NSLog(@"[HOOK] Activating sscanf hook...");
+__attribute__((constructor))
+static void initialize() {
+    NSLog(@"[+] Hook loaded, applying fishhook...");
 
     struct rebinding hook;
     hook.name = "sscanf";
-    hook.replacement = my_sscanf;
-    hook.replaced = (void *)&original_sscanf;
+    hook.replacement = (void *)my_sscanf;
+    hook.replaced = (void **)&original_sscanf;
+
     rebind_symbols(&hook, 1);
-}
 
-// Create a floating UIButton
-void showFloatingButton() {
+    // Optional: Test if we're in the app context
     dispatch_async(dispatch_get_main_queue(), ^{
-        UIWindow *keyWindow = [UIApplication sharedApplication].keyWindow;
+        UIWindow *keyWindow = nil;
+        for (UIWindow *window in [UIApplication sharedApplication].windows) {
+            if (window.isKeyWindow) {
+                keyWindow = window;
+                break;
+            }
+        }
 
-        UIButton *hookButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        hookButton.frame = CGRectMake(20, 100, 120, 40);
-        [hookButton setTitle:@"Hook sscanf" forState:UIControlStateNormal];
-        hookButton.backgroundColor = [UIColor colorWithRed:0.1 green:0.6 blue:1 alpha:0.8];
-        [hookButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        hookButton.layer.cornerRadius = 10;
-        hookButton.layer.borderWidth = 1;
-        hookButton.layer.borderColor = [UIColor whiteColor].CGColor;
-        hookButton.clipsToBounds = YES;
-
-        [hookButton addTarget:[NSBlockOperation blockOperationWithBlock:^{
-            activateHook();
-        }] action:@selector(main) forControlEvents:UIControlEventTouchUpInside];
-
-        [keyWindow addSubview:hookButton];
+        if (keyWindow) {
+            NSLog(@"[+] Key window acquired, hook appears successful.");
+        } else {
+            NSLog(@"[-] Could not find key window.");
+        }
     });
 }
 
-// Dylib entry
-__attribute__((constructor))
-static void initializer() {
-    NSLog(@"[INIT] Dylib loaded. Showing hook button...");
-    showFloatingButton();
-}
