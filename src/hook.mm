@@ -1,12 +1,13 @@
 #import <UIKit/UIKit.h>
 #import <mach/mach.h>
 #import <dlfcn.h>
+#import <objc/runtime.h>
 
 // === Replace with actual addresses ===
 #define PATCH_LEN 8
 
-void *sscanf_addr    = (void *)0x100000000; // 🛑 replace
-void *observer_addr  = (void *)0x100001000; // 🛑 replace
+void *sscanf_addr    = (void *)0x100000000; // 🛑 Replace with actual sscanf address
+void *observer_addr  = (void *)0x100001000; // 🛑 Replace with actual observer address
 
 uint8_t patch_sscanf[PATCH_LEN]   = { 0x00, 0x00, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6 }; // MOV X0, #0; RET
 uint8_t patch_observer[PATCH_LEN] = { 0x20, 0x00, 0x08, 0xD2, 0xC0, 0x03, 0x5F, 0xD6 }; // MOV W0, #1; RET
@@ -38,27 +39,24 @@ void apply_all_patches() {
 // === Floating Button ===
 void create_patch_button() {
     dispatch_async(dispatch_get_main_queue(), ^{
-UIWindow *window = nil;
-NSSet *connectedScenes = [UIApplication sharedApplication].connectedScenes;
+        UIWindow *window = nil;
+        NSSet *connectedScenes = [UIApplication sharedApplication].connectedScenes;
 
-UIWindow *window = nil;
-NSSet *connectedScenes = [UIApplication sharedApplication].connectedScenes;
-
-for (UIScene *scene in connectedScenes) {
-    if ([scene isKindOfClass:[UIWindowScene class]]) {
-        UIWindowScene *windowScene = (UIWindowScene *)scene;
-        NSArray *windows = windowScene.windows;
-        if (windows.count > 0) {
-            window = windows.firstObject;
-            break;
+        for (UIScene *scene in connectedScenes) {
+            if ([scene isKindOfClass:[UIWindowScene class]]) {
+                UIWindowScene *windowScene = (UIWindowScene *)scene;
+                NSArray *windows = windowScene.windows;
+                if (windows.count > 0) {
+                    window = windows.firstObject;
+                    break;
+                }
+            }
         }
-    }
-}
 
-
-                    anyObject].delegate.window;
-
-        if (!window) return;
+        if (!window) {
+            NSLog(@"[-] No UIWindow found");
+            return;
+        }
 
         UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
         btn.frame = CGRectMake(20, 100, 180, 50);
