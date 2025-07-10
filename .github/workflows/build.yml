@@ -14,12 +14,14 @@ jobs:
 
     - name: Build hook.dylib
       run: |
-        clang -dynamiclib -o hook.dylib hook.c fishhook.c \
+        clang++ -dynamiclib -o hook.dylib hook.mm fishhook.c \
           -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
-          -arch arm64 -fembed-bitcode
+          -arch arm64 -fembed-bitcode \
+          -framework UIKit -framework Foundation
 
     - name: Upload dylib
       uses: actions/upload-artifact@v4
       with:
         name: hook-dylib
         path: hook.dylib
+
