@@ -41,6 +41,9 @@ void create_patch_button() {
 UIWindow *window = nil;
 NSSet *connectedScenes = [UIApplication sharedApplication].connectedScenes;
 
+UIWindow *window = nil;
+NSSet *connectedScenes = [UIApplication sharedApplication].connectedScenes;
+
 for (UIScene *scene in connectedScenes) {
     if ([scene isKindOfClass:[UIWindowScene class]]) {
         UIWindowScene *windowScene = (UIWindowScene *)scene;
@@ -51,6 +54,7 @@ for (UIScene *scene in connectedScenes) {
         }
     }
 }
+
 
                     anyObject].delegate.window;
 
