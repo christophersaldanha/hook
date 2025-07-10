@@ -19,11 +19,13 @@ jobs:
 
     - name: Compile Dylib
       run: |
-        clang++ -std=c++17 -dynamiclib -arch arm64 \
-          -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
-          -framework UIKit \
-          src/hook.mm \
-          -o codpatch.dylib
+          clang++ -std=c++17 -dynamiclib -arch arm64 \
+             -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
+             -framework UIKit \
+             -framework Foundation \
+             -o codpatch.dylib \
+              src/hook.mm
+
 
     - name: Code Sign Dylib
       run: |
