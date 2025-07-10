@@ -1,27 +1,37 @@
-name: Build hook.dylib for iOS
+name: Build iOS Dylib
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
-  build:
+  build-dylib:
     runs-on: macos-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+    - name: Checkout Code
+      uses: actions/checkout@v4
 
-    - name: Build hook.dylib
+    - name: Install Dependencies
       run: |
-        clang++ -dynamiclib -o hook.dylib hook.mm fishhook.c \
-          -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
-          -arch arm64 -fembed-bitcode \
-          -framework UIKit -framework Foundation
+        brew install llvm
+        brew install ldid
 
-    - name: Upload dylib
+    - name: Compile Dylib
+      run: |
+        clang++ -std=c++17 -dynamiclib -arch arm64 \
+          -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
+          -framework UIKit \
+          src/hook.mm \
+          -o codpatch.dylib
+
+    - name: Code Sign Dylib
+      run: |
+        chmod +x /usr/local/bin/ldid || true
+        ldid -S toolchain/ent.plist codpatch.dylib
+
+    - name: Upload Dylib
       uses: actions/upload-artifact@v4
       with:
-        name: hook-dylib
-        path: hook.dylib
-
+        name: codpatch.dylib
+        path: codpatch.dylib
