@@ -39,15 +39,19 @@ void apply_all_patches() {
 void create_patch_button() {
     dispatch_async(dispatch_get_main_queue(), ^{
 UIWindow *window = nil;
-for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
+NSSet *connectedScenes = [UIApplication sharedApplication].connectedScenes;
+
+for (UIScene *scene in connectedScenes) {
     if ([scene isKindOfClass:[UIWindowScene class]]) {
         UIWindowScene *windowScene = (UIWindowScene *)scene;
-        if (windowScene.windows.count > 0) {
-            window = windowScene.windows.firstObject;
+        NSArray *windows = windowScene.windows;
+        if (windows.count > 0) {
+            window = windows.firstObject;
             break;
         }
     }
 }
+
                     anyObject].delegate.window;
 
         if (!window) return;
