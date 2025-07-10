@@ -38,7 +38,16 @@ void apply_all_patches() {
 // === Floating Button ===
 void create_patch_button() {
     dispatch_async(dispatch_get_main_queue(), ^{
-        UIWindow *window = UIWindow *window = [UIApplication.sharedApplication.connectedScenes
+UIWindow *window = nil;
+for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
+    if ([scene isKindOfClass:[UIWindowScene class]]) {
+        UIWindowScene *windowScene = (UIWindowScene *)scene;
+        if (windowScene.windows.count > 0) {
+            window = windowScene.windows.firstObject;
+            break;
+        }
+    }
+}
                     anyObject].delegate.window;
 
         if (!window) return;
