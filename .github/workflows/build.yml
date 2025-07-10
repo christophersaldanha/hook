@@ -19,22 +19,32 @@ jobs:
 
     - name: Compile Dylib
       run: |
-       clang++ -std=c++17 -dynamiclib -arch arm64 \
-       -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
-         -framework UIKit \
-           -framework Foundation \
-           -lobjc \
-           -o codpatch.dylib \
-           src/hook.mm
+        clang++ -std=c++17 -dynamiclib -arch arm64 \
+          -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
+          -framework UIKit \
+          -framework Foundation \
+          -lobjc \
+          -o codpatch.dylib \
+          src/hook.mm
 
-
-
+    - name: Create Entitlements
+      run: |
+        cat > ent.plist <<EOF
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+          <key>platform-application</key>
+          <true/>
+          <key>get-task-allow</key>
+          <true/>
+        </dict>
+        </plist>
+        EOF
 
     - name: Code Sign Dylib
       run: |
-         ldid_path=$(which ldid)
-          echo "Using ldid from: $ldid_path"
-           $ldid_path -S toolchain/ent.plist codpatch.dylib
+        ldid -Sent.plist codpatch.dylib
 
     - name: Upload Dylib
       uses: actions/upload-artifact@v4
