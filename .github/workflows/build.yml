@@ -31,8 +31,9 @@ jobs:
 
     - name: Code Sign Dylib
       run: |
-        chmod +x /usr/local/bin/ldid || true
-        ldid -S toolchain/ent.plist codpatch.dylib
+         ldid_path=$(which ldid)
+          echo "Using ldid from: $ldid_path"
+           $ldid_path -S toolchain/ent.plist codpatch.dylib
 
     - name: Upload Dylib
       uses: actions/upload-artifact@v4
