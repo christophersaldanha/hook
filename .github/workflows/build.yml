@@ -1,31 +1,27 @@
-name: Build iOS Dylib
+name: Build Dylib
 
 on:
-  workflow_dispatch:
   push:
-    branches: [main]
+    paths:
+      - 'src/**'
+      - 'toolchain/**'
+      - '.github/**'
 
 jobs:
   build:
     runs-on: macos-latest
-
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
-      - name: Set Executable
-        run: chmod +x toolchain/build.sh
-
-      - name: Download ldid
+      - name: Build dylib
         run: |
-          curl -L -o toolchain/ldid https://github.com/xerub/ldid/releases/download/v2.1.5/ldid2
-          chmod +x toolchain/ldid
-
-      - name: Build and Sign dylib
-        run: toolchain/build.sh
+          chmod +x toolchain/build.sh
+          toolchain/build.sh
 
       - name: Upload dylib
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: hook.dylib
           path: build/hook.dylib
+
