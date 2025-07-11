@@ -4,41 +4,42 @@ on:
   push:
     paths:
       - '**.mm'
-      - '**/CMakeLists.txt'
-      - '.github/workflows/build.yml'
+      - '**CMakeLists.txt'
+      - '.github/workflows/**'
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-13
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Install CMake
-        run: brew install cmake
+      - name: Set up Python (needed for CMake sometimes)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
 
-      - name: Create CMakeLists.txt
+      - name: Install dependencies
         run: |
-          cat <<EOF > CMakeLists.txt
-          cmake_minimum_required(VERSION 3.13)
-          project(Hook)
-          set(CMAKE_OSX_SYSROOT iphoneos)
-          set(CMAKE_OSX_ARCHITECTURES arm64)
-          set(CMAKE_CXX_FLAGS "\${CMAKE_CXX_FLAGS} -fobjc-arc -std=c++17")
-          add_library(hook SHARED hook.mm)
-          EOF
+          brew install cmake ninja
 
-      - name: Build dylib
+      - name: Create build directory
+        run: mkdir -p build
+
+      - name: Configure project with CMake
         run: |
-          mkdir -p build
-          cd build
-          cmake ..
-          make
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_SYSROOT=iphoneos \
+            -DCMAKE_BUILD_TYPE=Release
 
-      - name: Upload built dylib
+      - name: Build project
+        run: cmake --build build
+
+      - name: Upload dylib artifact
         uses: actions/upload-artifact@v4
         with:
-          name: codm_hook_dylib
-          path: |
-            build/libhook.dylib
+          name: hook-dylib
+          path: build/lib/hook.dylib
