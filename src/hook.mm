@@ -1,67 +1,41 @@
 #import <Foundation/Foundation.h>
-#import <dlfcn.h>
-#import <mach/mach.h>
-#import <mach-o/dyld.h>
-#import <sys/mman.h>
-#import <stdarg.h>
-#import <substrate.h>
+#include "fishhook.h"
+#include <dlfcn.h>
+#include <mach/mach.h>
+#include <mach-o/dyld.h>
+#include <unistd.h>
+#include <sys/mman.h>
 
-#define IN_MATCH_ADDR 0x102F805C4
-#define IN_LOBBY_ADDR 0x1012A09CC
-#define PATCH_ADDR    0x101E3069C
-#define PATCH_SIZE    8
+typedef int (*sscanf_ptr_t)(const char *, const char *, ...);
+sscanf_ptr_t orig_sscanf = NULL;
 
-#define SSCANF_ADDR   0x1012E0B4C
+bool (*IsInMatchGame)() = (bool(*)())0x102F805C4;
+bool (*IsInLobby)() = (bool(*)())0x1012A09CC;
 
-static bool isInMatch() {
-    return *(bool *)IN_MATCH_ADDR;
-}
+const uint64_t targetPatchAddr = 0x101E3069C;
+uint8_t originalBytes[8] = {0}; // Placeholder
+uint8_t patchBytes[8] = {0x20, 0x00, 0x08, 0xD2, 0xC0, 0x03, 0x5F, 0xD6};
 
-static bool isInLobby() {
-    return *(bool *)IN_LOBBY_ADDR;
-}
+void patchMemory(uint8_t *bytes) {
+    vm_prot_t prot;
+    vm_prot_t prot_max;
+    mach_port_t task = mach_task_self();
+    vm_address_t pageStart = targetPatchAddr & ~(vm_page_size - 1);
+    vm_region_basic_info_data_64_t info;
+    mach_msg_type_number_t info_count = VM_REGION_BASIC_INFO_COUNT_64;
+    memory_object_name_t object;
+    kern_return_t kr;
 
-static bool patched = false;
-static uint8_t orig_bytes[PATCH_SIZE];
-static void *sscanf_orig = NULL;
+    kr = vm_region_64(task, &pageStart, (vm_size_t[]){0}, VM_REGION_BASIC_INFO,
+                      (vm_region_info_t)&info, &info_count, &object);
 
-int sscanf_hook(const char *str, const char *fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-    int result = vsscanf(str, fmt, args);
-    va_end(args);
-    return result;
-}
-
-void patchMemory(uint64_t addr, const uint8_t *bytes, size_t size) {
-    uint64_t page = addr & ~(getpagesize() - 1);
-    mprotect((void *)page, getpagesize(), PROT_READ | PROT_WRITE | PROT_EXEC);
-    memcpy((void *)addr, bytes, size);
-    __builtin___clear_cache((char *)addr, (char *)(addr + size));
-    mprotect((void *)page, getpagesize(), PROT_READ | PROT_EXEC);
-}
-
-void *monitor_thread(void *) {
-    const uint8_t patch_bytes[PATCH_SIZE] = {0x20, 0x00, 0x08, 0xD2, 0xC0, 0x03, 0x5F, 0xD6};
-
-    while (true) {
-        if (!patched && isInMatch()) {
-            memcpy(orig_bytes, (void *)PATCH_ADDR, PATCH_SIZE);
-            patchMemory(PATCH_ADDR, patch_bytes, PATCH_SIZE);
-            MSHookFunction((void *)SSCANF_ADDR, (void *)sscanf_hook, &sscanf_orig);
-            patched = true;
-        } else if (patched && isInLobby()) {
-            patchMemory(PATCH_ADDR, orig_bytes, PATCH_SIZE);
-            MSHookFunction((void *)SSCANF_ADDR, sscanf_orig, NULL); // Unhook
-            patched = false;
+    if (kr == KERN_SUCCESS) {
+        kr = vm_protect(task, pageStart, vm_page_size, false, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY | VM_PROT_EXECUTE);
+        if (kr == KERN_SUCCESS) {
+            memcpy((void*)targetPatchAddr, bytes, sizeof(patchBytes));
+            vm_protect(task, pageStart, vm_page_size, false, info.protection);
         }
-        usleep(100000); // 100ms
     }
-    return NULL;
 }
 
-__attribute__((constructor))
-static void init() {
-    pthread_t t;
-    pthread_create(&t, NULL, monitor_thread, NULL);
-}
+int my_sscanf(const char *str, const char *fmt, ...) {
