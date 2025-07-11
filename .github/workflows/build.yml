@@ -2,52 +2,40 @@ name: Build iOS Dylib
 
 on:
   push:
-    branches: [main]
+    paths:
+      - '**.mm'
+      - '**/CMakeLists.txt'
+      - '.github/workflows/build_dylib.yml'
 
 jobs:
-  build-dylib:
+  build:
     runs-on: macos-latest
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    - name: Install Dependencies
-      run: |
-        brew install llvm
-        brew install ldid
+      - name: Set up build folder
+        run: |
+          mkdir -p build
+          echo -e 'cmake_minimum_required(VERSION 3.13)\n\
+project(Hook)\n\
+set(CMAKE_OSX_SYSROOT iphoneos)\n\
+set(CMAKE_OSX_ARCHITECTURES arm64)\n\
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fobjc-arc -std=c++17")\n\
+add_library(hook SHARED hook.mm)' > CMakeLists.txt
 
-    - name: Compile Dylib
-      run: |
-        clang++ -std=c++17 -dynamiclib -arch arm64 \
-          -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
-          -framework UIKit \
-          -framework Foundation \
-          -lobjc \
-          -o codpatch.dylib \
-          src/hook.mm
+      - name: Install CMake
+        run: brew install cmake
 
-    - name: Create Entitlements
-      run: |
-        cat > ent.plist <<EOF
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-          <key>platform-application</key>
-          <true/>
-          <key>get-task-allow</key>
-          <true/>
-        </dict>
-        </plist>
-        EOF
+      - name: Build dylib
+        run: |
+          cd build
+          cmake .. -DCMAKE_OSX_SYSROOT=iphoneos -DCMAKE_OSX_ARCHITECTURES=arm64
+          make
 
-    - name: Code Sign Dylib
-      run: |
-        ldid -Sent.plist codpatch.dylib
-
-    - name: Upload Dylib
-      uses: actions/upload-artifact@v4
-      with:
-        name: codpatch.dylib
-        path: codpatch.dylib
+      - name: Upload dylib artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: codm_patch_hook_dylib
+          path: build/libhook.dylib
