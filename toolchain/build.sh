@@ -1,25 +1,15 @@
 #!/bin/bash
 set -e
-
 echo "[*] Starting build process..."
 
-DYLIB_NAME="hook.dylib"
+SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+CLANG=$(xcrun --sdk iphoneos --find clang++)
+CFLAGS="-isysroot $SDK -arch arm64 -fobjc-arc -miphoneos-version-min=13.0"
 SRC="src/hook.mm"
-OUT="build/$DYLIB_NAME"
+OUT="build/hook.dylib"
 
 mkdir -p build
 
-xcrun --sdk iphoneos clang -arch arm64 \
-  -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" \
-  -miphoneos-version-min=11.0 \
-  -dynamiclib \
-  -fobjc-arc \
-  -std=c++17 \
-  -o "$OUT" "$SRC"
+$CLANG $SRC $CFLAGS -dynamiclib -o $OUT
 
-echo "[+] Built: $OUT"
-
-echo "[*] Signing with ldid..."
-toolchain/ldid -Stoolchain/ent.plist "$OUT"
-
-echo "[✓] Final dylib: $OUT"
+echo "[+] Built dylib at $OUT"
