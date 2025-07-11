@@ -36,8 +36,8 @@ jobs:
           cmake ..
           make
 
-      - name: Upload dylib
-        uses: actions/upload-artifact@v3
+      - name: Upload built dylib
+        uses: actions/upload-artifact@v4
         with:
           name: codm_hook_dylib
           path: build/libhook.dylib
