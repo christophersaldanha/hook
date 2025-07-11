@@ -39,3 +39,41 @@ void patchMemory(uint8_t *bytes) {
 }
 
 int my_sscanf(const char *str, const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    int result = vsscanf(str, fmt, args);
+    va_end(args);
+    return result;
+}
+
+void manageHooks() {
+    bool hooked = false;
+
+    while (true) {
+        if (IsInMatchGame() && !hooked) {
+            hooked = true;
+            patchMemory(patchBytes);
+            rebind_symbols((struct rebinding[1]) {
+                {"sscanf", (void *)my_sscanf, (void **)&orig_sscanf}
+            }, 1);
+        } else if (IsInLobby() && hooked) {
+            hooked = false;
+            patchMemory(originalBytes);  // Restore original bytes
+            rebind_symbols((struct rebinding[1]) {
+                {"sscanf", (void *)orig_sscanf, NULL}
+            }, 1);
+        }
+        usleep(500000); // check every 0.5s
+    }
+}
+
+__attribute__((constructor))
+void init() {
+    // Save original memory bytes from patch target
+    memcpy(originalBytes, (void*)targetPatchAddr, sizeof(originalBytes));
+
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
+        manageHooks();
+    });
+}
+
