@@ -5,7 +5,7 @@ on:
     paths:
       - '**.mm'
       - '**/CMakeLists.txt'
-      - '.github/workflows/build_dylib.yml'
+      - '.github/workflows/build.yml'
 
 jobs:
   build:
@@ -15,27 +15,29 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Set up build folder
-        run: |
-          mkdir -p build
-          echo -e 'cmake_minimum_required(VERSION 3.13)\n\
-project(Hook)\n\
-set(CMAKE_OSX_SYSROOT iphoneos)\n\
-set(CMAKE_OSX_ARCHITECTURES arm64)\n\
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fobjc-arc -std=c++17")\n\
-add_library(hook SHARED hook.mm)' > CMakeLists.txt
-
       - name: Install CMake
         run: brew install cmake
 
+      - name: Create CMakeLists.txt
+        run: |
+          cat <<EOF > CMakeLists.txt
+          cmake_minimum_required(VERSION 3.13)
+          project(Hook)
+          set(CMAKE_OSX_SYSROOT iphoneos)
+          set(CMAKE_OSX_ARCHITECTURES arm64)
+          set(CMAKE_CXX_FLAGS "\${CMAKE_CXX_FLAGS} -fobjc-arc -std=c++17")
+          add_library(hook SHARED hook.mm)
+          EOF
+
       - name: Build dylib
         run: |
+          mkdir -p build
           cd build
-          cmake .. -DCMAKE_OSX_SYSROOT=iphoneos -DCMAKE_OSX_ARCHITECTURES=arm64
+          cmake ..
           make
 
-      - name: Upload dylib artifact
+      - name: Upload dylib
         uses: actions/upload-artifact@v3
         with:
-          name: codm_patch_hook_dylib
+          name: codm_hook_dylib
           path: build/libhook.dylib
