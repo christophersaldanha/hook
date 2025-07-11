@@ -1,45 +1,31 @@
 name: Build iOS Dylib
 
 on:
-  push:
-    paths:
-      - '**.mm'
-      - '**CMakeLists.txt'
-      - '.github/workflows/**'
   workflow_dispatch:
+  push:
+    branches: [main]
 
 jobs:
   build:
-    runs-on: macos-13
+    runs-on: macos-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python (needed for CMake sometimes)
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
+      - name: Set Executable
+        run: chmod +x toolchain/build.sh
 
-      - name: Install dependencies
+      - name: Download ldid
         run: |
-          brew install cmake ninja
+          curl -L -o toolchain/ldid https://github.com/xerub/ldid/releases/download/v2.1.5/ldid2
+          chmod +x toolchain/ldid
 
-      - name: Create build directory
-        run: mkdir -p build
+      - name: Build and Sign dylib
+        run: toolchain/build.sh
 
-      - name: Configure project with CMake
-        run: |
-          cmake -S . -B build -G Ninja \
-            -DCMAKE_OSX_ARCHITECTURES=arm64 \
-            -DCMAKE_OSX_SYSROOT=iphoneos \
-            -DCMAKE_BUILD_TYPE=Release
-
-      - name: Build project
-        run: cmake --build build
-
-      - name: Upload dylib artifact
+      - name: Upload dylib
         uses: actions/upload-artifact@v4
         with:
-          name: hook-dylib
-          path: build/lib/hook.dylib
+          name: hook.dylib
+          path: build/hook.dylib
