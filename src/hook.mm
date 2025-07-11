@@ -1,85 +1,75 @@
-#import <UIKit/UIKit.h>
-#import <mach/mach.h>
-#import <dlfcn.h>
-#import <objc/runtime.h>
+// hook.mm
+#include <dlfcn.h>
+#include <mach-o/dyld.h>
+#include <sys/mman.h>
+#include <cstdio>
+#include <unistd.h>
+#include <pthread.h>
+#include <string.h>
+#include <stdint.h>
 
-// === Replace with actual addresses ===
-#define PATCH_LEN 8
+#define PATCH_ADDR 0x101E3069C
+#define IS_IN_MATCH_ADDR 0x102F805C4
+#define IS_IN_LOBBY_ADDR 0x1012A09CC
+#define SSCANF_ADDR 0x1012E0B4C
 
-void *sscanf_addr    = (void *)0x101E3069C; // 🛑 Replace with actual sscanf address
-void *observer_addr  = (void *)0x1012E0B4C; // 🛑 Replace with actual observer address
+bool patched = false;
+void* (*orig_sscanf)(const char*, const char*, ...);
 
-uint8_t patch_sscanf[PATCH_LEN]   = { 0x00, 0x00, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6 }; // MOV X0, #0; RET
-uint8_t patch_observer[PATCH_LEN] = { 0x20, 0x00, 0x08, 0xD2, 0xC0, 0x03, 0x5F, 0xD6 }; // MOV W0, #1; RET
+bool isInMatchGame() {
+    return *(uint8_t*)IS_IN_MATCH_ADDR == 1;
+}
 
-// === Patch logic ===
-void patch_memory(void *addr, const uint8_t *bytes) {
-    vm_address_t page = (vm_address_t)addr & ~(vm_page_size - 1);
-    vm_prot_t prot, max;
-    kern_return_t kr;
+bool isInLobby() {
+    return *(uint8_t*)IS_IN_LOBBY_ADDR == 1;
+}
 
-    kr = vm_remap(mach_task_self(), &page, vm_page_size, 0, VM_FLAGS_OVERWRITE,
-                  mach_task_self(), page, FALSE, &prot, &max, VM_INHERIT_COPY);
-    if (kr == KERN_SUCCESS) {
-        mprotect((void *)page, vm_page_size, PROT_READ | PROT_WRITE | PROT_EXEC);
-        memcpy(addr, bytes, PATCH_LEN);
-        mprotect((void *)page, vm_page_size, PROT_READ | PROT_EXEC);
-        NSLog(@"[+] Patched at %p", addr);
-    } else {
-        NSLog(@"[-] vm_remap failed for %p", addr);
+void patchMemory(uint64_t address, const uint8_t* bytes, size_t size) {
+    uint64_t pageStart = address & ~(getpagesize() - 1);
+    mprotect((void*)pageStart, getpagesize(), PROT_READ | PROT_WRITE | PROT_EXEC);
+    memcpy((void*)address, bytes, size);
+    __builtin___clear_cache((char*)address, (char*)(address + size));
+    mprotect((void*)pageStart, getpagesize(), PROT_READ | PROT_EXEC);
+}
+
+int sscanf_hook(const char* str, const char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    int result = vsscanf(str, fmt, args);
+    va_end(args);
+    printf("[HOOKED sscanf] Format: %s\n", fmt);
+    return result;
+}
+
+void hook_sscanf() {
+    uint64_t *target = (uint64_t*)SSCANF_ADDR;
+    uint64_t *hookFunc = (uint64_t*)&sscanf_hook;
+    patchMemory((uint64_t)target, (uint8_t*)&hookFunc, sizeof(hookFunc));
+}
+
+void* monitor_thread(void*) {
+    const uint8_t patch_bytes[] = { 0x20, 0x00, 0x08, 0xD2, 0xC0, 0x03, 0x5F, 0xD6 };
+    const uint8_t original_bytes[8];
+    memcpy((void*)original_bytes, (void*)PATCH_ADDR, 8);
+
+    while (true) {
+        if (!patched && isInMatchGame()) {
+            patchMemory(PATCH_ADDR, patch_bytes, sizeof(patch_bytes));
+            hook_sscanf();
+            patched = true;
+            printf("[+] Patched for match\n");
+        } else if (patched && isInLobby()) {
+            patchMemory(PATCH_ADDR, original_bytes, sizeof(original_bytes));
+            patched = false;
+            printf("[-] Unpatched in lobby\n");
+        }
+        usleep(500000); // 0.5 sec
     }
+    return NULL;
 }
 
-void apply_all_patches() {
-    patch_memory(sscanf_addr, patch_sscanf);
-    patch_memory(observer_addr, patch_observer);
-    NSLog(@"[+] All patches applied");
-}
-
-// === Floating Button ===
-void create_patch_button() {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        UIWindow *window = nil;
-        NSSet *connectedScenes = [UIApplication sharedApplication].connectedScenes;
-
-        for (UIScene *scene in connectedScenes) {
-            if ([scene isKindOfClass:[UIWindowScene class]]) {
-                UIWindowScene *windowScene = (UIWindowScene *)scene;
-                NSArray *windows = windowScene.windows;
-                if (windows.count > 0) {
-                    window = windows.firstObject;
-                    break;
-                }
-            }
-        }
-
-        if (!window) {
-            NSLog(@"[-] No UIWindow found");
-            return;
-        }
-
-        UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
-        btn.frame = CGRectMake(20, 100, 180, 50);
-        [btn setTitle:@"Apply COD Patches" forState:UIControlStateNormal];
-        btn.backgroundColor = [UIColor colorWithRed:0 green:0.5 blue:0 alpha:0.75];
-        [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        btn.layer.cornerRadius = 12;
-
-        [btn addTarget:nil action:@selector(triggerPatches) forControlEvents:UIControlEventTouchUpInside];
-
-        [window addSubview:btn];
-        NSLog(@"[+] Patch button added");
-    });
-}
-
-// Button tap = call patcher
-void triggerPatches() {
-    apply_all_patches();
-}
-
-// === Entry Point ===
 __attribute__((constructor))
-void init_patch_ui() {
-    NSLog(@"[+] COD Patcher dylib loaded");
-    create_patch_button();
+void init() {
+    pthread_t t;
+    pthread_create(&t, NULL, monitor_thread, NULL);
 }
