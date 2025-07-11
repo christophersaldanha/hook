@@ -1,80 +1,61 @@
-#import <Foundation/Foundation.h>
-#include "fishhook.h"
-#include <dlfcn.h>
-#include <mach/mach.h>
-#include <mach-o/dyld.h>
+#import <dlfcn.h>
+#import <mach/mach.h>
+#import <pthread.h>
+#import <sys/time.h>
+#include <stdio.h>
 #include <unistd.h>
-#include <sys/mman.h>
 
-typedef int (*sscanf_ptr_t)(const char *, const char *, ...);
-sscanf_ptr_t orig_sscanf = NULL;
+void *(*original_sscanf)(const char *, const char *, ...);
 
-bool (*IsInMatchGame)() = (bool(*)())0x102F805C4;
-bool (*IsInLobby)()     = (bool(*)())0x1012A09CC;
-
-// Patch 1: Main mod
-const uint64_t patch1Addr = 0x101E3069C;
-uint8_t patch1Bytes[8]    = {0x20, 0x00, 0x08, 0xD2, 0xC0, 0x03, 0x5F, 0xD6};
-uint8_t original1[8]      = {0};
-
-// Patch 2: sscanf override/bypass
-const uint64_t patch2Addr = 0x1012E0B4C;
-uint8_t patch2Bytes[8]    = {0x00, 0x00, 0x80, 0xD2, 0xC0, 0x03, 0x5F, 0xD6};
-uint8_t original2[8]      = {0};
-
-void patchMemory(uint64_t address, uint8_t *bytes) {
-    vm_address_t pageStart = address & ~(vm_page_size - 1);
-    mach_port_t task = mach_task_self();
-
-    kern_return_t kr = vm_protect(task, pageStart, vm_page_size, false, PROT_READ | PROT_WRITE | PROT_EXEC);
-    if (kr == KERN_SUCCESS) {
-        memcpy((void*)address, bytes, 8);
-        vm_protect(task, pageStart, vm_page_size, false, PROT_READ | PROT_EXEC); // optional restore
-    }
-}
-
-int my_sscanf(const char *str, const char *fmt, ...) {
+void *hooked_sscanf(const char *input, const char *fmt, ...) {
+    printf("[HOOKED sscanf] Called with input: %s, fmt: %s\n", input, fmt);
     va_list args;
     va_start(args, fmt);
-    int result = vsscanf(str, fmt, args);
+    void *result = vsscanf(input, fmt, args);
     va_end(args);
     return result;
 }
 
-void manageHooks() {
-    bool hooked = false;
+void patchMemory(uint64_t address, const uint8_t *bytes, size_t size) {
+    vm_prot_t orig_protection;
+    vm_prot_t unused;
+    mach_port_t task = mach_task_self();
 
-    while (true) {
-        if (IsInMatchGame() && !hooked) {
-            hooked = true;
-
-            patchMemory(patch1Addr, patch1Bytes);
-            patchMemory(patch2Addr, patch2Bytes);
-
-            rebind_symbols((struct rebinding[1]) {
-                {"sscanf", (void *)my_sscanf, (void **)&orig_sscanf}
-            }, 1);
-
-        } else if (IsInLobby() && hooked) {
-            hooked = false;
-
-            patchMemory(patch1Addr, original1);
-            patchMemory(patch2Addr, original2);
-
-            rebind_symbols((struct rebinding[1]) {
-                {"sscanf", (void *)orig_sscanf, NULL}
-            }, 1);
-        }
-        usleep(500000); // 0.5s polling
+    if (vm_remap(task, (vm_address_t *)&address, size, 0, VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+                 task, address, false, &orig_protection, &unused, VM_INHERIT_COPY) == KERN_SUCCESS) {
+        vm_protect(task, address, size, false, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE);
+        memcpy((void *)address, bytes, size);
+        vm_protect(task, address, size, false, orig_protection);
     }
 }
 
-__attribute__((constructor))
-void init() {
-    memcpy(original1, (void*)patch1Addr, sizeof(original1));
-    memcpy(original2, (void*)patch2Addr, sizeof(original2));
+void *manageHooks(void *arg) {
+    sleep(120); // wait 2 minutes
+    void *handle = dlopen(NULL, RTLD_NOW);
+    if (handle) {
+        void *sscanf_addr = dlsym(handle, "sscanf");
+        if (sscanf_addr) {
+            printf("[*] Hooking sscanf() at %p\n", sscanf_addr);
+            original_sscanf = (typeof(original_sscanf))sscanf_addr;
 
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
-        manageHooks();
-    });
+            // Simple overwrite — not safe across all iOS versions; better to use function rebinding libs
+            mprotect((void *)((uintptr_t)sscanf_addr & ~0xFFF), 0x1000, PROT_READ | PROT_WRITE | PROT_EXEC);
+            *(void **)sscanf_addr = (void *)hooked_sscanf;
+        }
+        dlclose(handle);
+    }
+
+    sleep(60); // wait 1 more minute (total 3 mins)
+    uint64_t patchAddr = 0x101E3069C;
+    uint8_t patchBytes[] = {0x20, 0x00, 0x08, 0xD2, 0xC0, 0x03, 0x5F, 0xD6};
+    patchMemory(patchAddr, patchBytes, sizeof(patchBytes));
+    printf("[*] Patched memory at 0x%llx\n", patchAddr);
+
+    return NULL;
+}
+
+__attribute__((constructor))
+static void initializer() {
+    pthread_t thread;
+    pthread_create(&thread, NULL, manageHooks, NULL);
 }
