@@ -1,27 +1,32 @@
-name: Build Dylib
+name: Build iOS Dylib with Fishhook
 
 on:
   push:
-    paths:
-      - 'src/**'
-      - 'toolchain/**'
-      - '.github/**'
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: macos-latest
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+    - uses: actions/checkout@v3
 
-      - name: Build dylib
-        run: |
-          chmod +x toolchain/build.sh
-          toolchain/build.sh
+    - name: Install ldid
+      run: brew install ldid
 
-      - name: Upload dylib
-        uses: actions/upload-artifact@v4
-        with:
-          name: hook.dylib
-          path: build/hook.dylib
+    - name: Build Hook dylib
+      run: |
+        clang++ -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
+          -arch arm64 -fobjc-arc -miphoneos-version-min=12.0 \
+          -shared src/hook.mm src/fishhook.c -o HookCod.dylib
 
+    - name: Sign with ldid
+      run: |
+        ldid -Sent.plist HookCod.dylib
+
+    - name: Upload dylib
+      uses: actions/upload-artifact@v3
+      with:
+        name: HookCod.dylib
+        path: HookCod.dylib
