@@ -13,3 +13,4 @@ mkdir -p build
 $CLANG $SRC $CFLAGS -dynamiclib -o $OUT
 
 echo "[+] Built dylib at $OUT"
+
