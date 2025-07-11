@@ -12,7 +12,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Build dylib
         run: |
@@ -20,7 +20,7 @@ jobs:
           toolchain/build.sh
 
       - name: Upload dylib
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: hook.dylib
           path: build/hook.dylib
